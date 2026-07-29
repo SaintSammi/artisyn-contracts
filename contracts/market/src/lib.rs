@@ -93,6 +93,13 @@ pub struct AssignmentTimedOut {
 }
 
 #[contractevent]
+pub struct JobReassigned {
+    pub id: u64,
+    pub previous_artisan: Address,
+    pub new_artisan: Address,
+}
+
+#[contractevent]
 pub struct JobApplication {
     pub id: u64,
     pub artisan: Address,
@@ -349,6 +356,78 @@ impl MarketContract {
         AssignmentTimedOut {
             id: job_id,
             artisan,
+        }
+        .publish(&env);
+    }
+
+    /// Reassigns a stalled assignment without moving or refunding escrow.
+    ///
+    /// A finder may reassign only while the job is still `Assigned` and the
+    /// current artisan has not started it within the assignment timeout.
+    pub fn reassign_artisan(env: Env, finder: Address, job_id: u64, new_artisan: Address) {
+        assert!(!is_paused(&env), "Contract Paused");
+        finder.require_auth();
+
+        let registry_contract: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::RegistryContract)
+            .expect("Contract not initialized");
+        let mut job: Job = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Job(job_id))
+            .expect("Job not found");
+
+        if job.finder != finder {
+            panic!("Not job owner");
+        }
+        if job.status != JobStatus::Assigned {
+            panic!("Job is not assigned");
+        }
+
+        let previous_artisan = job.artisan.clone().expect("Job has no assigned artisan");
+        if previous_artisan == new_artisan {
+            panic!("Artisan is already assigned");
+        }
+
+        let assigned_at: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::AssignmentTime(job_id))
+            .expect("Assignment time not found");
+        let timeout_at = assigned_at
+            .checked_add(ASSIGNMENT_TIMEOUT_SECONDS)
+            .expect("Assignment timeout overflow");
+        if env.ledger().timestamp() < timeout_at {
+            panic!("Assignment has not timed out");
+        }
+
+        let registry_client = registry::Client::new(&env, &registry_contract);
+        let profile = registry_client.get_profile(&new_artisan);
+        if profile.role != 3 {
+            panic!("User is not a verified Artisan");
+        }
+        if profile.is_blacklisted {
+            panic!("User is blacklisted");
+        }
+
+        job.artisan = Some(new_artisan.clone());
+        env.storage().persistent().set(&DataKey::Job(job_id), &job);
+        env.storage()
+            .persistent()
+            .set(&DataKey::AssignmentTime(job_id), &env.ledger().timestamp());
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Job(job_id), 100_000, 500_000);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::AssignmentTime(job_id), 100_000, 500_000);
+
+        JobReassigned {
+            id: job_id,
+            previous_artisan,
+            new_artisan,
         }
         .publish(&env);
     }
