@@ -63,7 +63,7 @@ fn test_create_job_transfers_funds_and_returns_id() {
     token_admin_client.mint(&finder, &1000);
     assert_eq!(token_client.balance(&finder), 1000);
 
-    let job_id = client.create_job(&finder, &token_client.address, &500);
+    let job_id = client.create_job(&finder, &token_client.address, &500, &0);
     assert_eq!(job_id, 1);
     assert_eq!(token_client.balance(&finder), 500);
     assert_eq!(token_client.balance(&contract_id), 500);
@@ -88,7 +88,7 @@ fn test_assign_artisan_success() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.assign_artisan(&finder, &job_id, &artisan);
 
@@ -115,7 +115,7 @@ fn test_reopen_assignment_just_before_timeout() {
 
     let assigned_at = 1_000;
     env.ledger().with_mut(|li| li.timestamp = assigned_at);
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
 
     env.ledger()
@@ -142,7 +142,7 @@ fn test_reopen_assignment_after_timeout_preserves_escrow_and_allows_reassignment
 
     let assigned_at = 1_000;
     env.ledger().with_mut(|li| li.timestamp = assigned_at);
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &first_artisan);
 
     env.ledger()
@@ -192,7 +192,7 @@ fn test_reassign_artisan_after_timeout_preserves_escrow_and_applications() {
 
     let assigned_at = 1_000;
     env.ledger().with_mut(|li| li.timestamp = assigned_at);
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.apply_for_job(&new_artisan, &job_id);
     market_client.assign_artisan(&finder, &job_id, &previous_artisan);
 
@@ -229,7 +229,7 @@ fn test_reassign_artisan_before_timeout_is_blocked() {
     seed_artisan_profile(&env, &registry_id, &new_artisan, 3);
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &previous_artisan);
 
     env.ledger()
@@ -254,7 +254,7 @@ fn test_reassign_artisan_after_job_started_is_blocked() {
     seed_artisan_profile(&env, &registry_id, &new_artisan, 3);
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &previous_artisan);
     market_client.start_job(&previous_artisan, &job_id);
 
@@ -295,7 +295,7 @@ fn test_assign_artisan_job_not_open() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
     market_client.assign_artisan(&finder, &job_id, &artisan);
@@ -323,7 +323,7 @@ fn test_assign_artisan_not_verified() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     seed_artisan_profile(&env, &registry_id, &non_artisan, 0);
 
@@ -349,7 +349,7 @@ fn test_apply_for_job_success() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     assert!(!market_client.has_applied(&job_id, &artisan));
     assert_eq!(market_client.get_job_applicants(&job_id).len(), 0);
@@ -392,7 +392,7 @@ fn test_apply_for_job_duplicate_rejected() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.apply_for_job(&artisan, &job_id);
     market_client.apply_for_job(&artisan, &job_id);
@@ -419,7 +419,7 @@ fn test_apply_for_job_multiple_applicants_persistence() {
     seed_artisan_profile(&env, &registry_id, &artisan1, 3);
     seed_artisan_profile(&env, &registry_id, &artisan2, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.apply_for_job(&artisan1, &job_id);
     market_client.apply_for_job(&artisan2, &job_id);
@@ -466,7 +466,7 @@ fn test_apply_for_job_not_open() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
     market_client.assign_artisan(&finder, &job_id, &artisan);
@@ -494,7 +494,7 @@ fn test_apply_for_job_not_artisan() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     seed_artisan_profile(&env, &registry_id, &non_artisan, 0);
 
@@ -519,7 +519,7 @@ fn test_apply_for_job_blacklisted() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     env.as_contract(&registry_id, || {
         use soroban_sdk::String;
@@ -557,7 +557,7 @@ fn test_apply_for_job_blocked_after_registry_blacklist() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     registry_client.blacklist_user(&admin, &artisan);
 
@@ -582,7 +582,7 @@ fn test_apply_for_job_allowed_after_registry_unblacklist() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     registry_client.blacklist_user(&admin, &artisan);
     registry_client.unblacklist_user(&admin, &artisan);
@@ -613,7 +613,7 @@ fn test_start_job_success() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
 
     market_client.start_job(&artisan, &job_id);
@@ -658,7 +658,7 @@ fn test_start_job_not_assigned() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
 
     market_client.start_job(&wrong_artisan, &job_id);
@@ -684,7 +684,7 @@ fn test_start_job_wrong_status() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.start_job(&artisan, &job_id);
 }
@@ -709,7 +709,7 @@ fn test_start_job_already_started() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -730,7 +730,7 @@ fn test_cancel_job_success() {
 
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     let finder_balance_before = token_client.balance(&finder);
     let contract_balance_before = token_client.balance(&market_id);
@@ -774,7 +774,7 @@ fn test_cancel_job_not_owner() {
 
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.cancel_job(&other_user, &job_id);
 }
@@ -795,7 +795,7 @@ fn test_cancel_job_already_assigned() {
 
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.assign_artisan(&finder, &job_id, &artisan);
 
@@ -818,7 +818,7 @@ fn test_cancel_job_already_in_progress() {
 
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
@@ -844,7 +844,7 @@ fn test_complete_job_success() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -888,7 +888,7 @@ fn test_complete_job_not_assigned() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -914,7 +914,7 @@ fn test_complete_job_wrong_status() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
 
     // Job is assigned, but not started yet
@@ -939,7 +939,7 @@ fn test_confirm_delivery_success() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
     market_client.complete_job(&artisan, &job_id);
@@ -997,7 +997,7 @@ fn test_confirm_delivery_not_finder() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
     market_client.complete_job(&artisan, &job_id);
@@ -1024,7 +1024,7 @@ fn test_confirm_delivery_wrong_status() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
 
     market_client.confirm_delivery(&finder, &job_id);
@@ -1048,7 +1048,7 @@ fn test_raise_dispute_success_from_in_progress_by_finder() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -1085,7 +1085,7 @@ fn test_raise_dispute_success_from_pending_review_by_artisan() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
     market_client.complete_job(&artisan, &job_id);
@@ -1125,7 +1125,7 @@ fn test_raise_dispute_unauthorized_user() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -1151,7 +1151,7 @@ fn test_raise_dispute_wrong_status() {
 
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
 
     market_client.raise_dispute(&finder, &job_id);
@@ -1177,7 +1177,8 @@ fn create_job_in_pending_review(
             status: JobStatus::PendingReview,
             start_time: 0,
             end_time,
-            deadline: 0,
+            deadline: 30 * 24 * 60 * 60,
+            total_extended: 0,
             dispute_reason: None,
         };
         env.storage().persistent().set(&DataKey::Job(job_id), &job);
@@ -1295,7 +1296,8 @@ fn test_auto_release_funds_wrong_status() {
             status: JobStatus::Completed,
             start_time: 0,
             end_time: 1000,
-            deadline: 0,
+            deadline: 30 * 24 * 60 * 60,
+            total_extended: 0,
             dispute_reason: None,
         };
         env.storage().persistent().set(&DataKey::Job(job_id), &job);
@@ -1350,7 +1352,7 @@ fn test_extend_deadline_success() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     // Extend by 3 days — must not panic
     market_client.extend_deadline(&finder, &job_id, &259200u64);
@@ -1373,7 +1375,7 @@ fn test_extend_deadline_multiple_times() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     // Extend twice — deadline accumulates
     market_client.extend_deadline(&finder, &job_id, &86400u64);
@@ -1409,7 +1411,7 @@ fn test_extend_deadline_not_owner() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.extend_deadline(&other, &job_id, &86400u64);
 }
@@ -1427,7 +1429,7 @@ fn test_extend_deadline_cancelled_job() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.cancel_job(&finder, &job_id);
 
     market_client.extend_deadline(&finder, &job_id, &86400u64);
@@ -1489,7 +1491,7 @@ fn test_increase_budget_success() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     // Balances before top-up
     assert_eq!(token_client.balance(&finder), 500);
@@ -1514,7 +1516,7 @@ fn test_increase_budget_multiple_times() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &300);
+    let job_id = market_client.create_job(&finder, &token_client.address, &300, &0);
 
     market_client.increase_budget(&finder, &job_id, &100);
     market_client.increase_budget(&finder, &job_id, &200);
@@ -1554,7 +1556,7 @@ fn test_increase_budget_not_owner() {
     token_admin_client.mint(&finder, &1000);
     token_admin_client.mint(&other, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.increase_budget(&other, &job_id, &100);
 }
@@ -1572,7 +1574,7 @@ fn test_increase_budget_cancelled_job() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.cancel_job(&finder, &job_id);
 
     market_client.increase_budget(&finder, &job_id, &100);
@@ -1770,7 +1772,7 @@ fn test_create_job_blocked_when_paused() {
     token_admin_client.mint(&finder, &1000);
 
     market_client.toggle_contract_pause(&admin);
-    market_client.create_job(&finder, &token_client.address, &500);
+    market_client.create_job(&finder, &token_client.address, &500, &0);
 }
 
 #[test]
@@ -1948,7 +1950,7 @@ fn test_emergency_withdraw_success() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    market_client.create_job(&finder, &token_client.address, &500);
+    market_client.create_job(&finder, &token_client.address, &500, &0);
 
     assert_eq!(token_client.balance(&market_id), 500);
     assert_eq!(token_client.balance(&rescue_target), 0);
@@ -1973,7 +1975,7 @@ fn test_emergency_withdraw_partial_amount() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    market_client.create_job(&finder, &token_client.address, &500);
+    market_client.create_job(&finder, &token_client.address, &500, &0);
 
     market_client.toggle_contract_pause(&admin);
     market_client.emergency_withdraw(&admin, &token_client.address, &200, &rescue_target);
@@ -2170,7 +2172,7 @@ fn create_disputed_job(
 
     seed_artisan_profile(env, registry_id, &artisan, 3);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
     market_client.raise_dispute(&finder, &job_id);
@@ -2264,7 +2266,7 @@ fn test_assign_juror_job_not_disputed() {
     seed_artisan_profile(&env, &registry_id, &artisan, 3);
 
     // Job is InProgress, not Disputed
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -2329,7 +2331,7 @@ fn test_fee_math_500_bps() {
     // Set Platform Fee to 500 BPS (5%)
     market_client.set_platform_fee(&admin, &500);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &1000);
+    let job_id = market_client.create_job(&finder, &token_client.address, &1000, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
     market_client.complete_job(&artisan, &job_id);
@@ -2364,7 +2366,7 @@ fn test_circuit_breaker_full_flow() {
     token_admin_client.mint(&finder, &2000);
 
     // Step 1: Normal operations work before pause
-    let _job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let _job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     assert_eq!(token_client.balance(&market_id), 500);
 
     // Step 2: Pause the contract
@@ -2379,7 +2381,7 @@ fn test_circuit_breaker_full_flow() {
     market_client.toggle_contract_pause(&admin);
 
     // Step 5: Verify normal operations work again after unpause
-    let job_id_2 = market_client.create_job(&finder, &token_client.address, &400);
+    let job_id_2 = market_client.create_job(&finder, &token_client.address, &400, &0);
     assert_eq!(token_client.balance(&market_id), 400);
     market_client.assign_artisan(&finder, &job_id_2, &artisan);
 }
@@ -2399,7 +2401,7 @@ fn test_circuit_breaker_create_job_blocked_during_pause() {
     token_admin_client.mint(&finder, &1000);
 
     market_client.toggle_contract_pause(&admin);
-    market_client.create_job(&finder, &token_client.address, &500);
+    market_client.create_job(&finder, &token_client.address, &500, &0);
 }
 
 #[test]
@@ -2421,7 +2423,7 @@ fn test_circuit_breaker_confirm_delivery_blocked_during_pause() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
     market_client.complete_job(&artisan, &job_id);
@@ -2444,7 +2446,7 @@ fn test_circuit_breaker_emergency_withdraw_succeeds_when_paused() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    market_client.create_job(&finder, &token_client.address, &500);
+    market_client.create_job(&finder, &token_client.address, &500, &0);
     assert_eq!(token_client.balance(&market_id), 500);
 
     market_client.toggle_contract_pause(&admin);
@@ -2477,7 +2479,7 @@ fn test_circuit_breaker_unpause_restores_operations() {
     market_client.toggle_contract_pause(&admin);
 
     // All operations should work after unpause
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     assert_eq!(token_client.balance(&market_id), 500);
 
     market_client.assign_artisan(&finder, &job_id, &artisan);
@@ -2500,7 +2502,7 @@ fn test_circuit_breaker_admin_functions_work_during_pause() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    market_client.create_job(&finder, &token_client.address, &500);
+    market_client.create_job(&finder, &token_client.address, &500, &0);
 
     // Pause the contract
     market_client.toggle_contract_pause(&admin);
@@ -2514,7 +2516,7 @@ fn test_circuit_breaker_admin_functions_work_during_pause() {
 
     // Verify contract is unpaused by creating a job
     token_admin_client.mint(&finder, &500);
-    let _job_id = market_client.create_job(&finder, &token_client.address, &300);
+    let _job_id = market_client.create_job(&finder, &token_client.address, &300, &0);
 }
 
 // ── auto_release_funds time-travel integration tests ────────────────────────
@@ -2548,7 +2550,7 @@ fn test_auto_release_time_travel_full_flow() {
     token_admin_client.mint(&finder, &1000);
 
     // REQUIREMENT 1: Finish a job
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -2610,7 +2612,7 @@ fn test_auto_release_time_travel_immediate_attempt_fails() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -2644,7 +2646,7 @@ fn test_auto_release_time_travel_six_days_fails() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -2682,7 +2684,7 @@ fn test_auto_release_time_travel_exactly_7_days_succeeds() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -2724,7 +2726,7 @@ fn test_auto_release_time_travel_exactly_8_days_succeeds() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -2769,7 +2771,7 @@ fn test_auto_release_time_travel_exactly_7_days_minus_one_fails() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
     market_client.start_job(&artisan, &job_id);
 
@@ -2813,7 +2815,7 @@ fn test_e2e_cross_contract_full_user_journey() {
     token_admin_client.mint(&finder, &1000);
 
     // Step 1: Create a job in Market
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     // Step 2: Register user in Registry as Finder (role 0)
     registry_client.register_user(&artisan, &String::from_str(&env, "ipfs://metadata"));
@@ -2880,7 +2882,7 @@ fn test_e2e_cross_contract_unregistered_user_fails() {
     let (token_client, token_admin_client) = create_token(&env, &admin);
     token_admin_client.mint(&finder, &1000);
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     // Attempt to assign unregistered user - should panic with "User not found"
     market_client.assign_artisan(&finder, &job_id, &unregistered_artisan);
@@ -2910,7 +2912,7 @@ fn test_e2e_cross_contract_finder_cannot_be_assigned() {
         &String::from_str(&env, "ipfs://metadata"),
     );
 
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
 
     // Attempt to assign Finder (role 0) - should panic
     market_client.assign_artisan(&finder, &job_id, &registered_finder);
@@ -2947,7 +2949,7 @@ fn test_e2e_cross_contract_curator_workflow() {
     registry_client.approve_artisan(&curator, &artisan);
 
     // Verify artisan can be assigned in Market
-    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
     market_client.assign_artisan(&finder, &job_id, &artisan);
 
     let job: Job = env.as_contract(&market_id, || {
@@ -2958,4 +2960,253 @@ fn test_e2e_cross_contract_curator_workflow() {
     });
     assert_eq!(job.artisan, Some(artisan));
     assert_eq!(job.status, JobStatus::Assigned);
+}
+
+// ── deadline policy tests ────────────────────────────────────────────────────
+
+#[test]
+fn test_create_job_with_initial_deadline() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    let custom_deadline = 7 * 24 * 60 * 60; // 7 days
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &custom_deadline);
+
+    let job: Job = env.as_contract(&market_id, || {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Job(job_id))
+            .unwrap()
+    });
+    assert_eq!(job.deadline, custom_deadline);
+    assert_eq!(job.total_extended, 0);
+}
+
+#[test]
+fn test_create_job_with_zero_deadline_uses_default() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
+
+    let job: Job = env.as_contract(&market_id, || {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Job(job_id))
+            .unwrap()
+    });
+    assert_eq!(job.deadline, DEFAULT_DEADLINE_SECONDS);
+}
+
+#[test]
+fn test_extend_deadline_within_cap_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
+
+    let one_day: u64 = 24 * 60 * 60;
+    market_client.extend_deadline(&finder, &job_id, &one_day);
+
+    let job: Job = env.as_contract(&market_id, || {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Job(job_id))
+            .unwrap()
+    });
+    assert_eq!(job.deadline, DEFAULT_DEADLINE_SECONDS + one_day);
+    assert_eq!(job.total_extended, one_day);
+}
+
+#[test]
+#[should_panic(expected = "Extension must be greater than zero")]
+fn test_extend_deadline_zero_extra_time_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
+
+    market_client.extend_deadline(&finder, &job_id, &0);
+}
+
+#[test]
+#[should_panic(expected = "Extension exceeds maximum single extension")]
+fn test_extend_deadline_exceeds_single_cap_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
+
+    let too_much = MAX_SINGLE_EXTENSION_SECONDS + 1;
+    market_client.extend_deadline(&finder, &job_id, &too_much);
+}
+
+#[test]
+#[should_panic(expected = "Cumulative extension exceeds cap")]
+fn test_extend_deadline_cumulative_cap_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    // Set small caps for easy testing: 7-day default, 3-day max single, 5-day cumulative
+    let three_days: u64 = 3 * 24 * 60 * 60;
+    let five_days: u64 = 5 * 24 * 60 * 60;
+    let seven_days: u64 = 7 * 24 * 60 * 60;
+    market_client.set_deadline_policy(&admin, &seven_days, &three_days, &five_days);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
+
+    // First extension: 3 days (at single cap) — total = 3 days
+    market_client.extend_deadline(&finder, &job_id, &three_days);
+
+    // Second extension: 3 days — total would be 6 days > 5-day cumulative cap
+    market_client.extend_deadline(&finder, &job_id, &three_days);
+}
+
+#[test]
+fn test_extend_deadline_cumulative_cap_at_boundary_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    // Set small caps: 7-day default, 3-day max single, 6-day cumulative
+    let three_days: u64 = 3 * 24 * 60 * 60;
+    let six_days: u64 = 6 * 24 * 60 * 60;
+    let seven_days: u64 = 7 * 24 * 60 * 60;
+    market_client.set_deadline_policy(&admin, &seven_days, &three_days, &six_days);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
+
+    // Two extensions of 3 days each = 6 days total (exactly at cumulative cap)
+    market_client.extend_deadline(&finder, &job_id, &three_days);
+    market_client.extend_deadline(&finder, &job_id, &three_days);
+}
+
+#[test]
+fn test_set_deadline_policy_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+
+    let one_week: u64 = 7 * 24 * 60 * 60;
+    let two_weeks: u64 = 14 * 24 * 60 * 60;
+    let four_weeks: u64 = 28 * 24 * 60 * 60;
+
+    market_client.set_deadline_policy(&admin, &one_week, &two_weeks, &four_weeks);
+
+    let (default_d, max_single, max_cum) = market_client.get_deadline_policy();
+    assert_eq!(default_d, one_week);
+    assert_eq!(max_single, two_weeks);
+    assert_eq!(max_cum, four_weeks);
+}
+
+#[test]
+#[should_panic(expected = "Unauthorized caller")]
+fn test_set_deadline_policy_non_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let impostor = Address::generate(&env);
+    let (_market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+
+    let one_week: u64 = 7 * 24 * 60 * 60;
+    let two_weeks: u64 = 14 * 24 * 60 * 60;
+    let four_weeks: u64 = 28 * 24 * 60 * 60;
+
+    market_client.set_deadline_policy(&impostor, &one_week, &two_weeks, &four_weeks);
+}
+
+#[test]
+#[should_panic(expected = "Max single extension must not exceed cumulative cap")]
+fn test_set_deadline_policy_single_exceeds_cumulative_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+
+    let one_week: u64 = 7 * 24 * 60 * 60;
+    let two_weeks: u64 = 14 * 24 * 60 * 60;
+
+    // max_single (two weeks) > max_cumulative (one week)
+    market_client.set_deadline_policy(&admin, &one_week, &two_weeks, &one_week);
+}
+
+#[test]
+#[should_panic(expected = "Extension exceeds maximum single extension")]
+fn test_custom_deadline_policy_enforced_on_extend() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, _registry_id, _registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    // Set custom policy: 7 day default, 3 day max single, 14 day cumulative
+    let three_days: u64 = 3 * 24 * 60 * 60;
+    let seven_days: u64 = 7 * 24 * 60 * 60;
+    let fourteen_days: u64 = 14 * 24 * 60 * 60;
+    market_client.set_deadline_policy(&admin, &seven_days, &three_days, &fourteen_days);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500, &0);
+
+    // 4 days exceeds max single extension (3 days)
+    let four_days: u64 = 4 * 24 * 60 * 60;
+    market_client.extend_deadline(&finder, &job_id, &four_days);
 }

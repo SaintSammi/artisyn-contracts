@@ -4,6 +4,9 @@ use soroban_sdk::{
 };
 
 pub const ASSIGNMENT_TIMEOUT_SECONDS: u64 = 7 * 24 * 60 * 60;
+pub const DEFAULT_DEADLINE_SECONDS: u64 = 30 * 24 * 60 * 60;
+pub const MAX_SINGLE_EXTENSION_SECONDS: u64 = 30 * 24 * 60 * 60;
+pub const MAX_CUMULATIVE_EXTENSION_SECONDS: u64 = 90 * 24 * 60 * 60;
 
 mod registry {
     use soroban_sdk::{contractclient, contracttype, Address, Env, String};
@@ -49,6 +52,7 @@ pub struct Job {
     pub start_time: u64,
     pub end_time: u64,
     pub deadline: u64,
+    pub total_extended: u64,
     pub dispute_reason: Option<String>,
 }
 
@@ -72,6 +76,9 @@ pub enum DataKey {
     AssignmentTime(u64),
     Application(u64, Address),
     JobApplicants(u64),
+    DefaultDeadline,
+    MaxSingleExtension,
+    MaxCumulativeExtension,
 }
 
 #[contractevent]
@@ -190,6 +197,13 @@ pub struct JurorAssigned {
     pub juror: Address,
 }
 
+#[contractevent]
+pub struct DeadlinePolicyUpdated {
+    pub default_deadline: u64,
+    pub max_single_extension: u64,
+    pub max_cumulative_extension: u64,
+}
+
 #[contract]
 pub struct MarketContract;
 
@@ -217,9 +231,25 @@ impl MarketContract {
             .set(&DataKey::RegistryContract, &registry_contract);
         env.storage().instance().set(&DataKey::Admin, admin);
         env.storage().instance().set(&DataKey::IsPaused, &false);
+        env.storage()
+            .instance()
+            .set(&DataKey::DefaultDeadline, &DEFAULT_DEADLINE_SECONDS);
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxSingleExtension, &MAX_SINGLE_EXTENSION_SECONDS);
+        env.storage().instance().set(
+            &DataKey::MaxCumulativeExtension,
+            &MAX_CUMULATIVE_EXTENSION_SECONDS,
+        );
     }
 
-    pub fn create_job(env: Env, finder: Address, token: Address, amount: i128) -> u64 {
+    pub fn create_job(
+        env: Env,
+        finder: Address,
+        token: Address,
+        amount: i128,
+        initial_deadline: u64,
+    ) -> u64 {
         assert!(!is_paused(&env), "Contract Paused");
         finder.require_auth();
 
@@ -235,6 +265,12 @@ impl MarketContract {
         env.storage().instance().set(&DataKey::JobCounter, &id);
         env.storage().instance().extend_ttl(100_000, 500_000);
 
+        let deadline = if initial_deadline == 0 {
+            DEFAULT_DEADLINE_SECONDS
+        } else {
+            initial_deadline
+        };
+
         let job = Job {
             id,
             finder,
@@ -245,7 +281,8 @@ impl MarketContract {
             status: JobStatus::Open,
             start_time: 0,
             end_time: 0,
-            deadline: 0,
+            deadline,
+            total_extended: 0,
             dispute_reason: None,
         };
         env.storage().persistent().set(&DataKey::Job(id), &job);
@@ -763,7 +800,39 @@ impl MarketContract {
             panic!("Job is already finalized");
         }
 
-        job.deadline += extra_time;
+        assert!(extra_time > 0, "Extension must be greater than zero");
+
+        let max_single: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MaxSingleExtension)
+            .unwrap_or(MAX_SINGLE_EXTENSION_SECONDS);
+        let max_cumulative: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MaxCumulativeExtension)
+            .unwrap_or(MAX_CUMULATIVE_EXTENSION_SECONDS);
+
+        assert!(
+            extra_time <= max_single,
+            "Extension exceeds maximum single extension"
+        );
+        let new_total = job
+            .total_extended
+            .checked_add(extra_time)
+            .expect("Total extension overflow");
+        assert!(
+            new_total <= max_cumulative,
+            "Cumulative extension exceeds cap"
+        );
+
+        let new_deadline = job
+            .deadline
+            .checked_add(extra_time)
+            .expect("Deadline overflow");
+
+        job.deadline = new_deadline;
+        job.total_extended = new_total;
 
         env.storage().persistent().set(&DataKey::Job(job_id), &job);
         env.storage()
@@ -914,6 +983,80 @@ impl MarketContract {
             new_fee_bps: fee_bps,
         }
         .publish(&env);
+    }
+
+    pub fn set_deadline_policy(
+        env: Env,
+        admin: Address,
+        default_deadline: u64,
+        max_single_extension: u64,
+        max_cumulative_extension: u64,
+    ) {
+        admin.require_auth();
+
+        let current_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("Admin not set");
+        assert!(admin == current_admin, "Unauthorized caller");
+
+        assert!(
+            default_deadline > 0,
+            "Default deadline must be greater than zero"
+        );
+        assert!(
+            max_single_extension > 0,
+            "Max single extension must be greater than zero"
+        );
+        assert!(
+            max_cumulative_extension > 0,
+            "Max cumulative extension must be greater than zero"
+        );
+        assert!(
+            max_single_extension <= max_cumulative_extension,
+            "Max single extension must not exceed cumulative cap"
+        );
+
+        env.storage()
+            .instance()
+            .set(&DataKey::DefaultDeadline, &default_deadline);
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxSingleExtension, &max_single_extension);
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxCumulativeExtension, &max_cumulative_extension);
+
+        DeadlinePolicyUpdated {
+            default_deadline,
+            max_single_extension,
+            max_cumulative_extension,
+        }
+        .publish(&env);
+    }
+
+    pub fn get_deadline_policy(env: Env) -> (u64, u64, u64) {
+        let default_deadline: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::DefaultDeadline)
+            .unwrap_or(DEFAULT_DEADLINE_SECONDS);
+        let max_single_extension: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MaxSingleExtension)
+            .unwrap_or(MAX_SINGLE_EXTENSION_SECONDS);
+        let max_cumulative_extension: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MaxCumulativeExtension)
+            .unwrap_or(MAX_CUMULATIVE_EXTENSION_SECONDS);
+        (
+            default_deadline,
+            max_single_extension,
+            max_cumulative_extension,
+        )
     }
 
     pub fn assign_juror(env: Env, admin: Address, job_id: u64, juror: Address) {
