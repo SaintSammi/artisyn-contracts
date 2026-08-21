@@ -72,6 +72,7 @@ pub enum DataKey {
     AssignmentTime(u64),
     Application(u64, Address),
     JobApplicants(u64),
+    CollectedFees(Address),
 }
 
 #[contractevent]
@@ -190,6 +191,13 @@ pub struct JurorAssigned {
     pub juror: Address,
 }
 
+#[contractevent]
+pub struct FeeCollected {
+    pub id: u64,
+    pub token: Address,
+    pub amount: i128,
+}
+
 #[contract]
 pub struct MarketContract;
 
@@ -201,6 +209,22 @@ pub fn is_paused(env: &Env) -> bool {
         .expect("Missing storage variable");
     env.storage().instance().extend_ttl(100_000, 500_000);
     paused
+}
+
+fn record_fee_collected(env: &Env, job_id: u64, token: &Address, amount: i128) {
+    let key = DataKey::CollectedFees(token.clone());
+    let total: i128 = env.storage().persistent().get(&key).unwrap_or(0);
+    env.storage().persistent().set(&key, &(total + amount));
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, 100_000, 500_000);
+
+    FeeCollected {
+        id: job_id,
+        token: token.clone(),
+        amount,
+    }
+    .publish(env);
 }
 
 #[contractimpl]
@@ -637,7 +661,10 @@ impl MarketContract {
         let token_client = token::TokenClient::new(&env, &job.token);
         let contract = env.current_contract_address();
         token_client.transfer(&contract, &artisan, &payout);
-        token_client.transfer(&contract, &admin, &fee);
+        if fee > 0 {
+            token_client.transfer(&contract, &admin, &fee);
+            record_fee_collected(&env, job_id, &job.token, fee);
+        }
 
         job.status = JobStatus::Completed;
         env.storage().persistent().set(&DataKey::Job(job_id), &job);
@@ -729,6 +756,7 @@ impl MarketContract {
         token_client.transfer(&contract, &artisan, &payout);
         if fee > 0 {
             token_client.transfer(&contract, &admin, &fee);
+            record_fee_collected(&env, job_id, &job.token, fee);
         }
 
         job.status = JobStatus::Completed;
@@ -1003,6 +1031,7 @@ impl MarketContract {
 
         if fee > 0 {
             token_client.transfer(&contract, &admin, &fee);
+            record_fee_collected(&env, job_id, &job.token, fee);
         }
 
         job.status = JobStatus::Completed;
@@ -1014,6 +1043,13 @@ impl MarketContract {
             artisan_share,
         }
         .publish(&env);
+    }
+
+    pub fn get_collected_fees(env: Env, token: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::CollectedFees(token))
+            .unwrap_or(0)
     }
 
     pub fn get_job_applicants(env: Env, job_id: u64) -> Vec<Address> {

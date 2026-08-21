@@ -2959,3 +2959,202 @@ fn test_e2e_cross_contract_curator_workflow() {
     assert_eq!(job.artisan, Some(artisan));
     assert_eq!(job.status, JobStatus::Assigned);
 }
+
+// ── platform fee accounting tests ───────────────────────────────────────────
+
+#[test]
+fn test_confirm_delivery_records_fee_and_emits_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, registry_id, registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let artisan = Address::generate(&env);
+
+    registry_client.initialize(&admin);
+
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    seed_artisan_profile(&env, &registry_id, &artisan, 3);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    market_client.assign_artisan(&finder, &job_id, &artisan);
+    market_client.start_job(&artisan, &job_id);
+    market_client.complete_job(&artisan, &job_id);
+
+    assert_eq!(market_client.get_collected_fees(&token_client.address), 0);
+
+    let events_before = env.events().all().len();
+    market_client.confirm_delivery(&finder, &job_id);
+    let events_after = env.events().all().len();
+
+    // 1% fee on 500 => 5
+    assert_eq!(market_client.get_collected_fees(&token_client.address), 5);
+    assert!(events_after > events_before);
+}
+
+#[test]
+fn test_auto_release_funds_records_fee() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (market_id, market_client, registry_id, registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let artisan = Address::generate(&env);
+
+    registry_client.initialize(&admin);
+
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    seed_artisan_profile(&env, &registry_id, &artisan, 3);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    market_client.assign_artisan(&finder, &job_id, &artisan);
+    market_client.start_job(&artisan, &job_id);
+    market_client.complete_job(&artisan, &job_id);
+
+    let job: Job = env.as_contract(&market_id, || {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Job(job_id))
+            .expect("Job not found")
+    });
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = job.end_time + 604800 + 1;
+    });
+
+    assert_eq!(market_client.get_collected_fees(&token_client.address), 0);
+
+    market_client.auto_release_funds(&artisan, &job_id);
+
+    // 1% fee on 500 => 5
+    assert_eq!(market_client.get_collected_fees(&token_client.address), 5);
+}
+
+#[test]
+fn test_resolve_dispute_records_fee() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (market_id, market_client, registry_id, registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+
+    let (job_id, _finder, _artisan) =
+        create_disputed_job(&env, &market_client, &registry_id, &registry_client, &admin);
+
+    let job: Job = env.as_contract(&market_id, || {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Job(job_id))
+            .expect("Job not found")
+    });
+
+    let juror = Address::generate(&env);
+    seed_artisan_profile(&env, &registry_id, &juror, 1);
+    market_client.assign_juror(&admin, &job_id, &juror);
+
+    assert_eq!(market_client.get_collected_fees(&job.token), 0);
+
+    // 1% fee on 500 => 5, remaining 495 split between finder and artisan
+    market_client.resolve_dispute(&juror, &job_id, &200, &295);
+
+    assert_eq!(market_client.get_collected_fees(&job.token), 5);
+}
+
+#[test]
+fn test_fee_accounting_reconciles_across_all_payout_paths() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, registry_id, registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+
+    registry_client.initialize(&admin);
+
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+
+    let finder_a = Address::generate(&env);
+    let artisan_a = Address::generate(&env);
+    let finder_b = Address::generate(&env);
+    let artisan_b = Address::generate(&env);
+    let finder_c = Address::generate(&env);
+    let artisan_c = Address::generate(&env);
+    let juror = Address::generate(&env);
+
+    token_admin_client.mint(&finder_a, &500);
+    token_admin_client.mint(&finder_b, &300);
+    token_admin_client.mint(&finder_c, &400);
+
+    seed_artisan_profile(&env, &registry_id, &artisan_a, 3);
+    seed_artisan_profile(&env, &registry_id, &artisan_b, 3);
+    seed_artisan_profile(&env, &registry_id, &artisan_c, 3);
+    seed_artisan_profile(&env, &registry_id, &juror, 1);
+
+    // Job A: standard completion via confirm_delivery. 1% of 500 => 5.
+    let job_a = market_client.create_job(&finder_a, &token_client.address, &500);
+    market_client.assign_artisan(&finder_a, &job_a, &artisan_a);
+    market_client.start_job(&artisan_a, &job_a);
+    market_client.complete_job(&artisan_a, &job_a);
+    market_client.confirm_delivery(&finder_a, &job_a);
+
+    // Job B: auto-release after the finder review window lapses. 1% of 300 => 3.
+    let job_b = market_client.create_job(&finder_b, &token_client.address, &300);
+    market_client.assign_artisan(&finder_b, &job_b, &artisan_b);
+    market_client.start_job(&artisan_b, &job_b);
+    market_client.complete_job(&artisan_b, &job_b);
+
+    // Job C: disputed and resolved by a juror. 1% of 400 => 4.
+    let job_c = market_client.create_job(&finder_c, &token_client.address, &400);
+    market_client.assign_artisan(&finder_c, &job_c, &artisan_c);
+    market_client.start_job(&artisan_c, &job_c);
+    market_client.raise_dispute(&finder_c, &job_c);
+    market_client.assign_juror(&admin, &job_c, &juror);
+    market_client.resolve_dispute(&juror, &job_c, &200, &196);
+
+    // Advance time to unlock job B's auto-release.
+    env.ledger().with_mut(|li| {
+        li.timestamp += 604800 + 1;
+    });
+    market_client.auto_release_funds(&artisan_b, &job_b);
+
+    assert_eq!(market_client.get_collected_fees(&token_client.address), 12);
+}
+
+#[test]
+fn test_zero_fee_is_not_recorded_or_transferred() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let (_market_id, market_client, registry_id, registry_client) =
+        setup_market_and_registry(&env, admin.clone());
+    let finder = Address::generate(&env);
+    let artisan = Address::generate(&env);
+
+    registry_client.initialize(&admin);
+
+    let (token_client, token_admin_client) = create_token(&env, &admin);
+    token_admin_client.mint(&finder, &1000);
+
+    seed_artisan_profile(&env, &registry_id, &artisan, 3);
+
+    market_client.set_platform_fee(&admin, &0);
+
+    let job_id = market_client.create_job(&finder, &token_client.address, &500);
+    market_client.assign_artisan(&finder, &job_id, &artisan);
+    market_client.start_job(&artisan, &job_id);
+    market_client.complete_job(&artisan, &job_id);
+    market_client.confirm_delivery(&finder, &job_id);
+
+    assert_eq!(token_client.balance(&admin), 0);
+    assert_eq!(market_client.get_collected_fees(&token_client.address), 0);
+}
