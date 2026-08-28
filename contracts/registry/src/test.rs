@@ -772,3 +772,408 @@ fn test_unblacklist_user_when_not_blacklisted_fails() {
 
     client.unblacklist_user(&admin, &user);
 }
+
+// ── verification application tests ───────────────────────────────────────────
+
+#[test]
+fn test_apply_for_verification_persists_pending_application() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+
+    client.apply_for_verification(&applicant);
+    assert_last_event(&env, &contract_id, "application_received", &applicant);
+
+    assert_eq!(
+        read_application_status(&env, &contract_id, &applicant),
+        Some(VerificationStatus::Pending)
+    );
+    assert_eq!(
+        client.get_verification_status(&applicant),
+        VerificationStatus::Pending
+    );
+    assert!(client.has_verification_application(&applicant));
+}
+
+#[test]
+fn test_has_verification_application_is_false_before_submission() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+
+    assert!(!client.has_verification_application(&applicant));
+}
+
+#[test]
+#[should_panic(expected = "Verification application not found")]
+fn test_get_verification_status_panics_without_application() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+
+    client.get_verification_status(&applicant);
+}
+
+#[test]
+#[should_panic(expected = "Verification application already pending")]
+fn test_apply_for_verification_rejects_duplicate_pending_application() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+
+    client.apply_for_verification(&applicant);
+    client.apply_for_verification(&applicant);
+}
+
+#[test]
+#[should_panic(expected = "User is already verified")]
+fn test_apply_for_verification_rejects_already_approved_applicant() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+
+    client.apply_for_verification(&applicant);
+    client.approve_artisan(&curator, &applicant);
+
+    client.apply_for_verification(&applicant);
+}
+
+#[test]
+fn test_apply_for_verification_allowed_again_after_rejection() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+
+    client.apply_for_verification(&applicant);
+    client.reject_artisan(&curator, &applicant);
+    assert_eq!(
+        client.get_verification_status(&applicant),
+        VerificationStatus::Rejected
+    );
+
+    client.apply_for_verification(&applicant);
+
+    assert_eq!(
+        client.get_verification_status(&applicant),
+        VerificationStatus::Pending
+    );
+}
+
+#[test]
+fn test_verification_status_full_transition_trail() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+
+    client.apply_for_verification(&applicant);
+    assert_eq!(
+        client.get_verification_status(&applicant),
+        VerificationStatus::Pending
+    );
+
+    client.reject_artisan(&curator, &applicant);
+    assert_eq!(
+        client.get_verification_status(&applicant),
+        VerificationStatus::Rejected
+    );
+
+    client.apply_for_verification(&applicant);
+    client.approve_artisan(&curator, &applicant);
+
+    assert_eq!(
+        client.get_verification_status(&applicant),
+        VerificationStatus::Approved
+    );
+    assert_eq!(client.get_profile(&applicant).role, ROLE_ARTISAN);
+    assert!(client.get_profile(&applicant).is_verified);
+}
+
+#[test]
+#[should_panic(expected = "User not registered")]
+fn test_apply_for_verification_panics_for_unregistered_user() {
+    let (env, _contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let ghost = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+
+    client.apply_for_verification(&ghost);
+}
+
+#[test]
+#[should_panic]
+fn test_apply_for_verification_requires_applicant_signature() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+
+    env.mock_auths(&[]);
+    client.apply_for_verification(&applicant);
+}
+
+// ── reject_artisan tests ─────────────────────────────────────────────────────
+
+#[test]
+fn test_reject_artisan_by_curator() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+    client.apply_for_verification(&applicant);
+
+    client.reject_artisan(&curator, &applicant);
+    assert_last_event(&env, &contract_id, "application_rejected", &applicant);
+
+    assert_eq!(
+        read_application_status(&env, &contract_id, &applicant),
+        Some(VerificationStatus::Rejected)
+    );
+}
+
+#[test]
+fn test_reject_artisan_by_admin() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &admin, ROLE_ADMIN);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+    client.apply_for_verification(&applicant);
+
+    client.reject_artisan(&admin, &applicant);
+
+    assert_eq!(
+        client.get_verification_status(&applicant),
+        VerificationStatus::Rejected
+    );
+}
+
+#[test]
+fn test_reject_artisan_leaves_profile_unverified() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+    client.apply_for_verification(&applicant);
+
+    client.reject_artisan(&curator, &applicant);
+
+    let profile = client.get_profile(&applicant);
+    assert_eq!(profile.role, ROLE_FINDER);
+    assert!(!profile.is_verified);
+}
+
+#[test]
+fn test_reject_artisan_does_not_affect_other_applicants() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant1 = Address::generate(&env);
+    let applicant2 = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant1, ROLE_FINDER);
+    seed_profile(&env, &contract_id, &applicant2, ROLE_FINDER);
+    client.apply_for_verification(&applicant1);
+    client.apply_for_verification(&applicant2);
+
+    client.reject_artisan(&curator, &applicant1);
+
+    assert_eq!(
+        client.get_verification_status(&applicant1),
+        VerificationStatus::Rejected
+    );
+    assert_eq!(
+        client.get_verification_status(&applicant2),
+        VerificationStatus::Pending
+    );
+}
+
+#[test]
+#[should_panic(expected = "Caller must be Curator or Admin")]
+fn test_reject_artisan_panics_when_called_by_finder() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let finder = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &finder, ROLE_FINDER);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+    client.apply_for_verification(&applicant);
+
+    client.reject_artisan(&finder, &applicant);
+}
+
+#[test]
+#[should_panic(expected = "Caller not registered")]
+fn test_reject_artisan_panics_for_unregistered_caller() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let ghost = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+    client.apply_for_verification(&applicant);
+
+    client.reject_artisan(&ghost, &applicant);
+}
+
+#[test]
+#[should_panic(expected = "User not found")]
+fn test_reject_artisan_panics_for_unregistered_applicant() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let ghost = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+
+    client.reject_artisan(&curator, &ghost);
+}
+
+#[test]
+#[should_panic(expected = "Verification application is not pending")]
+fn test_reject_artisan_requires_an_application() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+
+    client.reject_artisan(&curator, &applicant);
+}
+
+#[test]
+#[should_panic(expected = "Verification application is not pending")]
+fn test_reject_artisan_cannot_be_called_twice() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+    client.apply_for_verification(&applicant);
+
+    client.reject_artisan(&curator, &applicant);
+    client.reject_artisan(&curator, &applicant);
+}
+
+#[test]
+#[should_panic(expected = "Verification application is not pending")]
+fn test_reject_artisan_cannot_reject_approved_application() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+    client.apply_for_verification(&applicant);
+    client.approve_artisan(&curator, &applicant);
+
+    client.reject_artisan(&curator, &applicant);
+}
+
+#[test]
+#[should_panic(expected = "Verification application is not pending")]
+fn test_approve_artisan_cannot_approve_rejected_application() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+    client.apply_for_verification(&applicant);
+    client.reject_artisan(&curator, &applicant);
+
+    client.approve_artisan(&curator, &applicant);
+}
+
+#[test]
+#[should_panic]
+fn test_reject_artisan_requires_caller_signature() {
+    let (env, contract_id, client) = setup_env();
+    let admin = Address::generate(&env);
+    let curator = Address::generate(&env);
+    let applicant = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin);
+    seed_profile(&env, &contract_id, &curator, ROLE_CURATOR);
+    seed_profile(&env, &contract_id, &applicant, ROLE_FINDER);
+    client.apply_for_verification(&applicant);
+
+    env.mock_auths(&[]);
+    client.reject_artisan(&curator, &applicant);
+}

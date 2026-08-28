@@ -22,6 +22,7 @@ pub struct Profile {
 pub enum VerificationStatus {
     Pending,
     Approved,
+    Rejected,
 }
 
 #[derive(Clone)]
@@ -62,6 +63,14 @@ pub struct UserVerified {
 pub struct ApplicationReceived {
     #[topic]
     pub user_address: Address,
+    pub status: VerificationStatus,
+}
+
+#[contractevent]
+pub struct ApplicationRejected {
+    #[topic]
+    pub user_address: Address,
+    pub status: VerificationStatus,
 }
 
 #[contractevent]
@@ -250,12 +259,31 @@ impl Registry {
             panic!("Metadata hash is missing");
         }
 
+        // A rejected applicant may re-apply; pending and approved records stay authoritative.
+        match read_verification_status(&env, &caller) {
+            Some(VerificationStatus::Pending) => panic!("Verification application already pending"),
+            Some(VerificationStatus::Approved) => panic!("User is already verified"),
+            Some(VerificationStatus::Rejected) | None => {}
+        }
+
         write_verification_status(&env, &caller, &VerificationStatus::Pending);
 
         ApplicationReceived {
             user_address: caller,
+            status: VerificationStatus::Pending,
         }
         .publish(&env);
+    }
+
+    pub fn get_verification_status(env: Env, user: Address) -> VerificationStatus {
+        match read_verification_status(&env, &user) {
+            Some(status) => status,
+            None => panic!("Verification application not found"),
+        }
+    }
+
+    pub fn has_verification_application(env: Env, user: Address) -> bool {
+        read_verification_status(&env, &user).is_some()
     }
 
     pub fn approve_artisan(env: Env, caller: Address, artisan: Address) {
@@ -290,6 +318,40 @@ impl Registry {
         write_verification_status(&env, &artisan, &VerificationStatus::Approved);
 
         UserVerified { artisan }.publish(&env);
+    }
+
+    pub fn reject_artisan(env: Env, caller: Address, artisan: Address) {
+        caller.require_auth();
+
+        let caller_profile = match read_profile(&env, &caller) {
+            Some(p) => p,
+            None => panic!("Caller not registered"),
+        };
+
+        if caller_profile.role != ROLE_CURATOR && caller_profile.role != ROLE_ADMIN {
+            panic!("Caller must be Curator or Admin");
+        }
+
+        if read_profile(&env, &artisan).is_none() {
+            panic!("User not found");
+        }
+
+        let application_status = match read_verification_status(&env, &artisan) {
+            Some(status) => status,
+            None => panic!("Verification application is not pending"),
+        };
+
+        if application_status != VerificationStatus::Pending {
+            panic!("Verification application is not pending");
+        }
+
+        write_verification_status(&env, &artisan, &VerificationStatus::Rejected);
+
+        ApplicationRejected {
+            user_address: artisan,
+            status: VerificationStatus::Rejected,
+        }
+        .publish(&env);
     }
 
     pub fn blacklist_user(env: Env, admin: Address, user: Address) {
